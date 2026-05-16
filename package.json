@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
-    "dev:server": "node --watch server.js",
+    "dev:server": "node --watch-path=server.js --watch-path=.env --watch-preserve-output server.js",
     "build": "vite build",
     "start": "node server.js",
     "lint": "eslint .",

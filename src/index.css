@@ -9,8 +9,8 @@
   --shadow:
     0 20px 50px rgba(35, 26, 16, 0.08);
 
-  --sans: 'Segoe UI', 'Trebuchet MS', sans-serif;
-  --heading: Georgia, 'Times New Roman', serif;
+  --sans: 'Aptos', 'Segoe UI', 'Trebuchet MS', sans-serif;
+  --heading: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/1.5 var(--sans);
@@ -33,6 +33,10 @@
 
 body {
   margin: 0;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 #root {
@@ -64,10 +68,26 @@ h2 {
   letter-spacing: -0.03em;
   margin: 0;
 }
+
+h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  color: var(--text-h);
+}
+
 p {
   margin: 0;
 }
 
 a {
   text-decoration: none;
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
