@@ -1016,6 +1016,145 @@
   color: var(--muted);
 }
 
+.pupil-mode-switcher {
+  display: inline-grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 250, 243, 0.64);
+}
+
+.pupil-mode-switcher button {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  color: var(--text-h);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.pupil-mode-switcher button.is-active {
+  background: var(--accent);
+  color: #fffaf2;
+}
+
+.pupil-mode-switcher button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.learn-panel {
+  display: grid;
+  min-height: 340px;
+}
+
+.game-card,
+.game-summary,
+.fact-statement {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--panel);
+}
+
+.game-card,
+.game-summary {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.game-head,
+.game-actions,
+.game-summary-actions,
+.true-false-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.game-score {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.game-options {
+  display: grid;
+  gap: 10px;
+}
+
+.game-option,
+.true-false-button {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.52);
+  color: var(--text-h);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.true-false-button {
+  width: auto;
+  min-width: 140px;
+  text-align: center;
+}
+
+.game-option:hover,
+.true-false-button:hover {
+  transform: translateY(-1px);
+  border-color: var(--active-border);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.game-option.is-correct,
+.true-false-button.is-correct {
+  border-color: rgba(40, 125, 78, 0.52);
+  background: rgba(76, 175, 80, 0.16);
+}
+
+.game-option.is-wrong,
+.true-false-button.is-wrong {
+  border-color: rgba(176, 57, 57, 0.5);
+  background: rgba(176, 57, 57, 0.12);
+}
+
+.game-feedback {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.game-good {
+  color: #1f7a44;
+  font-weight: 700;
+}
+
+.game-bad {
+  color: #9b2f2f;
+  font-weight: 700;
+}
+
+.fact-statement {
+  padding: 22px;
+  font-size: 1.04rem;
+  line-height: 1.65;
+}
+
 .empty-card-steps {
   display: flex;
   flex-wrap: wrap;
@@ -1087,6 +1226,16 @@
   .chat-tools {
     width: 100%;
     justify-items: start;
+  }
+
+  .pupil-mode-switcher {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .pupil-mode-switcher button,
+  .true-false-button {
+    width: 100%;
   }
 
   .message {
