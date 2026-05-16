@@ -2,10 +2,11 @@ import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
+import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { GoogleGenAI } from '@google/genai'
 
-const app = express()
+export const app = express()
 const port = Number(process.env.PORT || 8787)
 const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
 const imageModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image-preview'
@@ -13,6 +14,7 @@ const RETRYABLE_STATUS_CODES = new Set([429, 500, 503])
 const MAX_MODEL_RETRIES = 3
 const RETRY_DELAY_MS = 1200
 const DEFAULT_QUOTA_COOLDOWN_MS = 16000
+const IS_SERVERLESS_RUNTIME = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME)
 const GENERATED_IMAGE_DIR = path.join(process.cwd(), 'public', 'generated')
 const FALLBACK_IMAGE_DIR = path.join(process.cwd(), 'public', 'fallbacks')
 const SMART_PERSONA_TEXT_CONFIG = {
@@ -20,6 +22,7 @@ const SMART_PERSONA_TEXT_CONFIG = {
   maxOutputTokens: 320,
   thinkingConfig: {
     thinkingLevel: 'LOW',
+    thinkingBudget: 512,
   },
 }
 let modelCooldownUntil = 0
@@ -363,12 +366,14 @@ function getFallbackBackgroundImageUrl(profile, visualTheme) {
 }
 
 async function generateBackgroundImage(profile, visualTheme) {
-  ensureGeneratedImageDir()
+  if (!IS_SERVERLESS_RUNTIME) {
+    ensureGeneratedImageDir()
 
-  const { filePath, publicUrl } = getGeneratedBackgroundPath(profile, visualTheme)
+    const { filePath, publicUrl } = getGeneratedBackgroundPath(profile, visualTheme)
 
-  if (fs.existsSync(filePath)) {
-    return publicUrl
+    if (fs.existsSync(filePath)) {
+      return publicUrl
+    }
   }
 
   const response = await generateContentWithRetry({
@@ -390,6 +395,12 @@ async function generateBackgroundImage(profile, visualTheme) {
     throw new Error('The image model returned no background image.')
   }
 
+  if (IS_SERVERLESS_RUNTIME) {
+    const mimeType = imagePart.inlineData.mimeType || 'image/png'
+    return `data:${mimeType};base64,${imagePart.inlineData.data}`
+  }
+
+  const { filePath, publicUrl } = getGeneratedBackgroundPath(profile, visualTheme)
   fs.writeFileSync(filePath, Buffer.from(imagePart.inlineData.data, 'base64'))
   return publicUrl
 }
@@ -1113,18 +1124,6 @@ function toAppError(error, fallbackMessage) {
   return appError
 }
 
-function getModelRequestDebugInfo(config) {
-  return {
-    model: config?.model || model,
-    hasThinkingConfig: Boolean(config?.config?.thinkingConfig),
-    promptLength: typeof config?.contents === 'string'
-      ? config.contents.length
-      : Array.isArray(config?.contents)
-        ? config.contents.length
-        : undefined,
-  }
-}
-
 async function generateWithRetry(config, emptyResponseMessage) {
   const client = getClient()
   let lastError = null
@@ -1147,33 +1146,6 @@ async function generateWithRetry(config, emptyResponseMessage) {
       return response.text.trim()
     } catch (error) {
       lastError = error
-
-      const debugInfo = getModelRequestDebugInfo(config)
-      const status = getErrorStatus(error)
-
-      if (status === 400) {
-        console.error('Gemini request failed with status 400:', {
-          message: error instanceof Error ? error.message : String(error),
-          request: debugInfo,
-        })
-      }
-
-      if (config?.config?.thinkingConfig && supportsThinkingConfigError(error)) {
-        console.warn('Retrying Gemini request without thinkingConfig due to unsupported option.', {
-          message: error instanceof Error ? error.message : String(error),
-          request: debugInfo,
-        })
-
-        const fallbackConfig = {
-          ...config,
-          config: {
-            ...config.config,
-          },
-        }
-        delete fallbackConfig.config.thinkingConfig
-
-        return generateWithRetry(fallbackConfig, emptyResponseMessage)
-      }
 
       if (isQuotaExceededError(error)) {
         markModelCooldown(error)
@@ -1300,12 +1272,6 @@ app.post('/api/persona', async (req, res) => {
   }
 })
 
-app.get('/api/duo', (_req, res) => {
-  res.status(405).json({
-    error: 'Use POST /api/duo with JSON body { firstWikipediaUrl, secondWikipediaUrl, audienceProfile }.',
-  })
-})
-
 app.post('/api/duo', async (req, res) => {
   try {
     const { firstWikipediaUrl, secondWikipediaUrl } = req.body ?? {}
@@ -1345,7 +1311,6 @@ app.post('/api/duo', async (req, res) => {
       conversation,
     })
   } catch (error) {
-    console.error('API /api/duo error:', error)
     const appError = toAppError(error, 'Unable to create a two-person conversation right now.')
     res.status(appError.statusCode).json({
       error: appError.message,
@@ -1414,12 +1379,6 @@ app.post('/api/background', async (req, res) => {
   }
 })
 
-app.get('/api/chat', (_req, res) => {
-  res.status(405).json({
-    error: 'Use POST /api/chat with JSON body { profile, persona, message, languageCode?, audienceProfile? }.',
-  })
-})
-
 app.post('/api/chat', async (req, res) => {
   try {
     const { profile, persona, history, message, languageCode } = req.body ?? {}
@@ -1447,7 +1406,6 @@ app.post('/api/chat', async (req, res) => {
 
     res.json({ reply })
   } catch (error) {
-    console.error('API /api/chat error:', error)
     const appError = toAppError(error, 'Unable to generate a reply right now.')
     res.status(appError.statusCode).json({
       error: appError.message,
@@ -1485,6 +1443,10 @@ app.post('/api/opening', async (req, res) => {
   }
 })
 
-app.listen(port, () => {
-  console.log(`Persona server listening on http://localhost:${port}`)
-})
+const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : ''
+
+if (import.meta.url === entryUrl) {
+  app.listen(port, () => {
+    console.log(`Persona server listening on http://localhost:${port}`)
+  })
+}

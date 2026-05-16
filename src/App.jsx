@@ -94,6 +94,162 @@ function pickRandomItems(items, count) {
     .slice(0, count)
 }
 
+function shuffleItems(items) {
+  return [...items].sort(() => Math.random() - 0.5)
+}
+
+function getWikipediaSlugTitle(url) {
+  const rawSlug = String(url || '').split('/wiki/')[1] || ''
+  return decodeURIComponent(rawSlug).replaceAll('_', ' ').trim()
+}
+
+function splitIntoSentences(text) {
+  return String(text || '')
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
+    .filter((sentence) => sentence.length > 36)
+}
+
+function buildOptionSet(correctAnswer, distractors, count = 4) {
+  const uniqueOptions = []
+
+  ;[correctAnswer, ...distractors].forEach((option) => {
+    const normalized = String(option || '').trim()
+
+    if (!normalized || uniqueOptions.includes(normalized)) {
+      return
+    }
+
+    uniqueOptions.push(normalized)
+  })
+
+  return shuffleItems(uniqueOptions).slice(0, count)
+}
+
+function buildFalseSummaryVariants(sentence, profile) {
+  const sampleTitles = [
+    ...PERSONA_EXAMPLE_POOL.map(getWikipediaSlugTitle),
+    'Isaac Newton',
+    'Frida Kahlo',
+    'Nelson Mandela',
+    'Serena Williams',
+  ].filter((title) => title && title !== profile?.title)
+
+  const decoyTitle = sampleTitles[0] || 'another historical figure'
+  const sentenceWithDecoyTitle =
+    profile?.title && sentence.includes(profile.title)
+      ? sentence.replace(profile.title, decoyTitle)
+      : `${sentence} This page is mainly about ${decoyTitle}.`
+
+  return [
+    sentenceWithDecoyTitle,
+    `${profile?.title || 'This person'} is described here as a fictional character with no real-world biography.`,
+    `${profile?.title || 'This person'} is presented here as a place instead of a person.`,
+  ]
+}
+
+function buildQuizRounds(profile, persona) {
+  if (!profile || !persona) {
+    return []
+  }
+
+  const biographySentences = splitIntoSentences(profile.extract)
+  const summarySentence =
+    biographySentences[0] ||
+    `${profile.title} is ${profile.description || 'a public figure described on Wikipedia'}.`
+  const descriptionAnswer = profile.description || persona.tagline || 'A public figure described on Wikipedia.'
+  const titleOptions = buildOptionSet(
+    profile.title,
+    shuffleItems(
+      [
+        ...PERSONA_EXAMPLE_POOL.map(getWikipediaSlugTitle),
+        'Ada Yonath',
+        'Stephen Hawking',
+        'Maya Angelou',
+        'Usain Bolt',
+      ].filter((title) => title && title !== profile.title),
+    ),
+  )
+  const descriptionOptions = buildOptionSet(descriptionAnswer, [
+    'a fictional character invented for a story',
+    'a mountain range in South America',
+    'a coding language used for websites',
+    'a weather event that lasts all year',
+  ])
+  const summaryOptions = buildOptionSet(summarySentence, buildFalseSummaryVariants(summarySentence, profile))
+
+  return [
+    {
+      prompt: 'Who are you learning about right now?',
+      options: titleOptions,
+      correctAnswer: profile.title,
+      explanation: `This learning set is based on the Wikipedia page for ${profile.title}.`,
+    },
+    {
+      prompt: 'Which short description matches this person best?',
+      options: descriptionOptions,
+      correctAnswer: descriptionAnswer,
+      explanation: `The profile describes ${profile.title} as ${descriptionAnswer}.`,
+    },
+    {
+      prompt: 'Which fact matches the biography summary?',
+      options: summaryOptions,
+      correctAnswer: summarySentence,
+      explanation: 'That sentence comes from the current Wikipedia-grounded summary.',
+    },
+  ]
+}
+
+function buildFactCheckRounds(profile, persona) {
+  if (!profile || !persona) {
+    return []
+  }
+
+  const biographySentences = splitIntoSentences(profile.extract)
+  const sampleTitles = shuffleItems(
+    [
+      ...PERSONA_EXAMPLE_POOL.map(getWikipediaSlugTitle),
+      'Jane Austen',
+      'Michael Jordan',
+      'Katherine Johnson',
+      'Charlie Chaplin',
+    ].filter((title) => title && title !== profile.title),
+  )
+
+  const rounds = [
+    {
+      statement: `This Wikipedia page is about ${profile.title}.`,
+      answer: true,
+      explanation: `Correct. The current persona was created from ${profile.title}'s page.`,
+    },
+    {
+      statement: `This Wikipedia page is about ${sampleTitles[0] || 'someone else'}.`,
+      answer: false,
+      explanation: `Not quite. The selected person is ${profile.title}.`,
+    },
+    {
+      statement: `${profile.title} is described here as ${profile.description || persona.tagline || 'a public figure on Wikipedia'}.`,
+      answer: true,
+      explanation: 'That line matches the short description attached to this biography.',
+    },
+    {
+      statement: `${profile.title} is presented here as a completely fictional person.`,
+      answer: false,
+      explanation: 'No. This app uses public Wikipedia biography information about a real person.',
+    },
+  ]
+
+  if (biographySentences[0]) {
+    rounds.push({
+      statement: biographySentences[0],
+      answer: true,
+      explanation: 'That statement comes from the biography summary shown for this persona.',
+    })
+  }
+
+  return rounds
+}
+
 function getOpeningTurnLabel(openingTurn) {
   return openingTurn === 'user' ? 'You write first' : 'Persona writes first'
 }
@@ -124,7 +280,7 @@ function buildAppTheme(visualTheme) {
   const secondary = visualTheme.secondaryColor
   const surface = visualTheme.surfaceColor
   const background = visualTheme.backgroundColor
-  const isDarkTheme = getColorLuminance(surface) < 120 || getColorLuminance(background) < 120
+  const isDarkSurface = getColorLuminance(surface) < 120
 
   return {
     fallbackBackground: `
@@ -144,9 +300,9 @@ function buildAppTheme(visualTheme) {
     panelStrong: toRgba(surface, 0.96),
     border: toRgba(primary, 0.14),
     shadow: `0 24px 60px ${toRgba(primary, 0.14)}`,
-    text: isDarkTheme ? '#EAF1F6' : '#4E463F',
-    textStrong: isDarkTheme ? '#FFFFFF' : '#1C1815',
-    muted: isDarkTheme ? 'rgba(234, 241, 246, 0.72)' : '#7D6F63',
+    text: isDarkSurface ? '#EAF1F6' : '#4E463F',
+    textStrong: isDarkSurface ? '#FFFFFF' : '#1C1815',
+    muted: isDarkSurface ? 'rgba(234, 241, 246, 0.72)' : '#7D6F63',
   }
 }
 
@@ -253,6 +409,17 @@ function App() {
   const [personaOpeningTurn, setPersonaOpeningTurn] = useState('assistant')
   const [conversationReady, setConversationReady] = useState(false)
   const [draft, setDraft] = useState('')
+  const [pupilMode, setPupilMode] = useState('chat')
+  const [quizRounds, setQuizRounds] = useState([])
+  const [quizIndex, setQuizIndex] = useState(0)
+  const [quizScore, setQuizScore] = useState(0)
+  const [quizChoice, setQuizChoice] = useState('')
+  const [quizAnswered, setQuizAnswered] = useState(false)
+  const [factRounds, setFactRounds] = useState([])
+  const [factIndex, setFactIndex] = useState(0)
+  const [factScore, setFactScore] = useState(0)
+  const [factChoice, setFactChoice] = useState(null)
+  const [factAnswered, setFactAnswered] = useState(false)
   const [loadingPersona, setLoadingPersona] = useState(false)
   const [loadingDuoConversation, setLoadingDuoConversation] = useState(false)
   const [sendingMessage, setSendingMessage] = useState(false)
@@ -281,8 +448,13 @@ function App() {
     !!secondDuoWikipediaUrl.trim() &&
     !loadingDuoConversation &&
     !duoConversation
+  const isPupilExperience = audienceProfile === 'pupil'
   const duoTranscript = Array.isArray(duoConversation?.transcript) ? duoConversation.transcript : []
   const duoMaxTurns = duoConversation?.maxTurns || 6
+  const activeQuizRound = quizRounds[quizIndex] || null
+  const activeFactRound = factRounds[factIndex] || null
+  const quizFinished = quizRounds.length > 0 && quizIndex >= quizRounds.length
+  const factFinished = factRounds.length > 0 && factIndex >= factRounds.length
   const appThemeStyle = {
     '--app-background-fallback': activeTheme.fallbackBackground,
     '--app-background-image': persona?.backgroundImageUrl ? `url("${persona.backgroundImageUrl}")` : 'none',
@@ -340,6 +512,44 @@ function App() {
     window.localStorage.setItem(AUDIENCE_PROFILE_STORAGE_KEY, audienceProfile)
   }, [audienceProfile])
 
+  useEffect(() => {
+    if (!isPupilExperience || !profile || !persona) {
+      setPupilMode('chat')
+      setQuizRounds([])
+      setQuizIndex(0)
+      setQuizScore(0)
+      setQuizChoice('')
+      setQuizAnswered(false)
+      setFactRounds([])
+      setFactIndex(0)
+      setFactScore(0)
+      setFactChoice(null)
+      setFactAnswered(false)
+      return
+    }
+
+    setPupilMode('chat')
+    setQuizRounds(buildQuizRounds(profile, persona))
+    setQuizIndex(0)
+    setQuizScore(0)
+    setQuizChoice('')
+    setQuizAnswered(false)
+    setFactRounds(buildFactCheckRounds(profile, persona))
+    setFactIndex(0)
+    setFactScore(0)
+    setFactChoice(null)
+    setFactAnswered(false)
+  }, [
+    isPupilExperience,
+    profile?.fullUrl,
+    profile?.title,
+    profile?.description,
+    profile?.extract,
+    persona?.displayName,
+    persona?.tagline,
+    persona?.groundingNote,
+  ])
+
   function resetActiveSession(nextAudienceProfile = '') {
     setAudienceProfile(nextAudienceProfile)
     setProfile(null)
@@ -353,7 +563,76 @@ function App() {
     setSelectedLanguageCode('en')
     setPersonaOpeningTurn('assistant')
     setEmojiPickerOpen(false)
-    setLoadingDuoTurn(false)
+  }
+
+  function restartQuizGame() {
+    if (!profile || !persona) {
+      return
+    }
+
+    setQuizRounds(buildQuizRounds(profile, persona))
+    setQuizIndex(0)
+    setQuizScore(0)
+    setQuizChoice('')
+    setQuizAnswered(false)
+  }
+
+  function submitQuizAnswer(option) {
+    if (!activeQuizRound || quizAnswered) {
+      return
+    }
+
+    setQuizChoice(option)
+    setQuizAnswered(true)
+
+    if (option === activeQuizRound.correctAnswer) {
+      setQuizScore((current) => current + 1)
+    }
+  }
+
+  function goToNextQuizRound() {
+    if (!quizAnswered) {
+      return
+    }
+
+    setQuizChoice('')
+    setQuizAnswered(false)
+    setQuizIndex((current) => current + 1)
+  }
+
+  function restartFactGame() {
+    if (!profile || !persona) {
+      return
+    }
+
+    setFactRounds(buildFactCheckRounds(profile, persona))
+    setFactIndex(0)
+    setFactScore(0)
+    setFactChoice(null)
+    setFactAnswered(false)
+  }
+
+  function submitFactAnswer(nextChoice) {
+    if (!activeFactRound || factAnswered) {
+      return
+    }
+
+    setFactChoice(nextChoice)
+    setFactAnswered(true)
+
+    if (nextChoice === activeFactRound.answer) {
+      setFactScore((current) => current + 1)
+    }
+  }
+
+  function goToNextFactRound() {
+    if (!factAnswered) {
+      return
+    }
+
+    setFactChoice(null)
+    setFactAnswered(false)
+    setFactIndex((current) => current + 1)
   }
 
   useEffect(() => {
@@ -1043,7 +1322,13 @@ function App() {
               <div className="chat-header">
                 <div>
                   <p className="card-label">Conversation</p>
-                  <h2>{persona ? `Chat with ${persona.displayName || profile?.title}` : 'Persona chat'}</h2>
+                  <h2>
+                    {persona
+                      ? isPupilExperience && pupilMode !== 'chat'
+                        ? `${persona.displayName || profile?.title} learning mode`
+                        : `Chat with ${persona.displayName || profile?.title}`
+                      : 'Persona chat'}
+                  </h2>
                 </div>
                 <div className="chat-tools">
                   <p className="chat-status">
@@ -1093,6 +1378,33 @@ function App() {
                       </select>
                     </label>
                   ) : null}
+                  {isPupilExperience ? (
+                    <div className="pupil-mode-switcher" aria-label="Choose pupil learning mode">
+                      <button
+                        type="button"
+                        className={pupilMode === 'chat' ? 'is-active' : ''}
+                        onClick={() => setPupilMode('chat')}
+                      >
+                        Chat
+                      </button>
+                      <button
+                        type="button"
+                        className={pupilMode === 'quiz' ? 'is-active' : ''}
+                        onClick={() => setPupilMode('quiz')}
+                        disabled={!persona}
+                      >
+                        Quiz quest
+                      </button>
+                      <button
+                        type="button"
+                        className={pupilMode === 'fact-check' ? 'is-active' : ''}
+                        onClick={() => setPupilMode('fact-check')}
+                        disabled={!persona}
+                      >
+                        Fact check
+                      </button>
+                    </div>
+                  ) : null}
                   {persona ? (
                     <button
                       type="button"
@@ -1109,6 +1421,173 @@ function App() {
                 </div>
               </div>
 
+              {isPupilExperience && pupilMode === 'quiz' ? (
+                <div className="learn-panel">
+                  {persona ? (
+                    quizFinished ? (
+                      <div className="game-summary">
+                        <p className="card-label">Quiz complete</p>
+                        <h3>{quizScore} / {quizRounds.length} correct</h3>
+                        <p>
+                          You just reviewed who {persona.displayName || profile?.title} is, what the
+                          page says about them, and one summary fact from the biography.
+                        </p>
+                        <div className="game-summary-actions">
+                          <button type="button" className="ghost-button" onClick={restartQuizGame}>
+                            Play again
+                          </button>
+                          <button type="button" className="ghost-button" onClick={() => setPupilMode('chat')}>
+                            Back to chat
+                          </button>
+                        </div>
+                      </div>
+                    ) : activeQuizRound ? (
+                      <div className="game-card">
+                        <div className="game-head">
+                          <div>
+                            <p className="card-label">Quiz quest</p>
+                            <h3>{activeQuizRound.prompt}</h3>
+                          </div>
+                          <span className="game-score">
+                            {quizIndex + 1} / {quizRounds.length} rounds
+                          </span>
+                        </div>
+                        <div className="game-options">
+                          {activeQuizRound.options.map((option) => {
+                            const isCorrect = option === activeQuizRound.correctAnswer
+                            const isSelected = option === quizChoice
+                            const optionState = quizAnswered
+                              ? isCorrect
+                                ? 'is-correct'
+                                : isSelected
+                                  ? 'is-wrong'
+                                  : ''
+                              : ''
+
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                className={`game-option ${optionState}`.trim()}
+                                onClick={() => submitQuizAnswer(option)}
+                                disabled={quizAnswered}
+                              >
+                                {option}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <div className="game-feedback">
+                          {quizAnswered ? (
+                            <>
+                              <p className={quizChoice === activeQuizRound.correctAnswer ? 'game-good' : 'game-bad'}>
+                                {quizChoice === activeQuizRound.correctAnswer ? 'Correct answer.' : 'Not quite this time.'}
+                              </p>
+                              <p>{activeQuizRound.explanation}</p>
+                            </>
+                          ) : (
+                            <p>Pick the answer that best matches the current Wikipedia-based profile.</p>
+                          )}
+                        </div>
+                        <div className="game-actions">
+                          <span className="game-score">Score: {quizScore}</span>
+                          <button type="button" className="start-chat-button" onClick={goToNextQuizRound} disabled={!quizAnswered}>
+                            {quizIndex === quizRounds.length - 1 ? 'See results' : 'Next round'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null
+                  ) : (
+                    <div className="empty-chat">
+                      <div className="empty-chat-copy">
+                        <p className="card-label">Quiz quest</p>
+                        <p>Create a persona first, then the quiz will build itself from that biography.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : isPupilExperience && pupilMode === 'fact-check' ? (
+                <div className="learn-panel">
+                  {persona ? (
+                    factFinished ? (
+                      <div className="game-summary">
+                        <p className="card-label">Fact check complete</p>
+                        <h3>{factScore} / {factRounds.length} correct</h3>
+                        <p>
+                          Nice work. You checked which statements really belong to {persona.displayName || profile?.title}'s biography.
+                        </p>
+                        <div className="game-summary-actions">
+                          <button type="button" className="ghost-button" onClick={restartFactGame}>
+                            Play again
+                          </button>
+                          <button type="button" className="ghost-button" onClick={() => setPupilMode('chat')}>
+                            Back to chat
+                          </button>
+                        </div>
+                      </div>
+                    ) : activeFactRound ? (
+                      <div className="game-card">
+                        <div className="game-head">
+                          <div>
+                            <p className="card-label">Fact check</p>
+                            <h3>Does this statement match the current biography?</h3>
+                          </div>
+                          <span className="game-score">
+                            {factIndex + 1} / {factRounds.length} rounds
+                          </span>
+                        </div>
+                        <article className="fact-statement">
+                          <p>{activeFactRound.statement}</p>
+                        </article>
+                        <div className="true-false-row">
+                          <button
+                            type="button"
+                            className={`true-false-button ${factAnswered && factChoice === true ? (activeFactRound.answer === true ? 'is-correct' : 'is-wrong') : ''}`.trim()}
+                            onClick={() => submitFactAnswer(true)}
+                            disabled={factAnswered}
+                          >
+                            True
+                          </button>
+                          <button
+                            type="button"
+                            className={`true-false-button ${factAnswered && factChoice === false ? (activeFactRound.answer === false ? 'is-correct' : 'is-wrong') : ''}`.trim()}
+                            onClick={() => submitFactAnswer(false)}
+                            disabled={factAnswered}
+                          >
+                            False
+                          </button>
+                        </div>
+                        <div className="game-feedback">
+                          {factAnswered ? (
+                            <>
+                              <p className={factChoice === activeFactRound.answer ? 'game-good' : 'game-bad'}>
+                                {factChoice === activeFactRound.answer ? 'Correct call.' : 'That one was a trap.'}
+                              </p>
+                              <p>{activeFactRound.explanation}</p>
+                            </>
+                          ) : (
+                            <p>Read the statement, then decide whether it really matches the selected Wikipedia persona.</p>
+                          )}
+                        </div>
+                        <div className="game-actions">
+                          <span className="game-score">Score: {factScore}</span>
+                          <button type="button" className="start-chat-button" onClick={goToNextFactRound} disabled={!factAnswered}>
+                            {factIndex === factRounds.length - 1 ? 'See results' : 'Next round'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null
+                  ) : (
+                    <div className="empty-chat">
+                      <div className="empty-chat-copy">
+                        <p className="card-label">Fact check</p>
+                        <p>Create a persona first, then the fact-check game will use that biography.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
               <div
                 className={`chat-stream ${messages.length ? 'has-messages' : 'is-empty'}`}
                 ref={chatScrollerRef}
@@ -1138,7 +1617,11 @@ function App() {
                             : 'Pick a language and let the persona open the conversation.'
                           : 'Paste a Wikipedia link on the left to generate the persona and unlock the chat.'}
                       </p>
-                      <span>Questions about work, beliefs, habits, goals, and advice usually work best.</span>
+                      <span>
+                        {isPupilExperience
+                          ? 'You can also switch to Quiz quest or Fact check to turn the biography into a short study game.'
+                          : 'Questions about work, beliefs, habits, goals, and advice usually work best.'}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -1196,6 +1679,8 @@ function App() {
                   {sendingMessage ? 'Thinking...' : 'Send'}
                 </button>
               </form>
+                </>
+              )}
               </section>
             ) : duoConversation ? (
               <div className="duo-results">
