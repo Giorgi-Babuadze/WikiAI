@@ -1,23 +1,61 @@
 .shell {
+  position: relative;
+  isolation: isolate;
   display: grid;
   gap: 24px;
   padding: 32px;
+  min-height: 100svh;
+  transition:
+    background 320ms ease,
+    color 220ms ease;
+}
+
+.shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    linear-gradient(rgba(12, 16, 24, 0.34), rgba(12, 16, 24, 0.56)),
+    var(--app-background-image),
+    var(--app-background-fallback);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(10px);
+  transform: scale(1.06);
+}
+
+.shell > * {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-panel,
+.duo-panel,
 .persona-card,
 .chat-panel {
   border: 1px solid var(--border);
   border-radius: 28px;
-  background: var(--panel);
+  background: var(--panel-strong);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
 }
 
 .hero-panel {
   padding: 32px;
   background:
-    radial-gradient(circle at top left, rgba(196, 95, 60, 0.22), transparent 30%),
-    radial-gradient(circle at top right, rgba(11, 85, 106, 0.18), transparent 35%),
+    var(--hero-glow),
+    var(--panel);
+  transition: background 320ms ease;
+}
+
+.duo-panel {
+  display: grid;
+  gap: 20px;
+  padding: 28px 32px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06)),
     var(--panel);
 }
 
@@ -41,7 +79,14 @@
   margin-top: 24px;
 }
 
+.duo-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
 .persona-form input,
+.duo-form input,
 .composer textarea {
   width: 100%;
   border: 1px solid var(--border);
@@ -54,6 +99,7 @@
 }
 
 .persona-form button,
+.duo-form button,
 .composer button {
   border: none;
   border-radius: 18px;
@@ -68,17 +114,20 @@
 }
 
 .persona-form button,
+.duo-form button,
 .composer button {
   padding: 0 22px;
 }
 
 .persona-form button:hover,
+.duo-form button:hover,
 .composer button:hover {
   transform: translateY(-1px);
   box-shadow: 0 14px 24px rgba(8, 43, 56, 0.15);
 }
 
 .persona-form button:disabled,
+.duo-form button:disabled,
 .composer button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -106,6 +155,110 @@
   display: grid;
   grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
   gap: 24px;
+  align-items: start;
+}
+
+.duo-results {
+  display: grid;
+  gap: 18px;
+}
+
+.duo-history-card {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.duo-history-list {
+  margin-top: 0;
+}
+
+.duo-history-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.duo-history-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+}
+
+.duo-history-thumb + .duo-history-thumb {
+  margin-left: -12px;
+}
+
+.duo-participants {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.duo-person-card,
+.duo-transcript-card {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.duo-person-card {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 16px;
+}
+
+.duo-person-image {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  object-fit: cover;
+  background: #ead9c9;
+}
+
+.duo-person-image.placeholder {
+  display: grid;
+  place-items: center;
+  color: #fffaf2;
+  background: var(--placeholder-gradient);
+}
+
+.duo-transcript-card {
+  padding: 20px;
+}
+
+.duo-setup {
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.duo-transcript {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.duo-turn {
+  max-width: 82%;
+  padding: 16px 18px;
+  border-radius: 22px;
+}
+
+.duo-turn.speaker-a {
+  justify-self: start;
+  background: var(--assistant-bubble);
+}
+
+.duo-turn.speaker-b {
+  justify-self: end;
+  background: var(--user-bubble);
 }
 
 .persona-card,
@@ -145,14 +298,22 @@
   text-align: left;
   border: 1px solid var(--border);
   border-radius: 18px;
-  background: rgba(255, 250, 243, 0.68);
+  background: var(--panel);
   padding: 10px;
   cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.history-item:hover {
+  transform: translateY(-1px);
 }
 
 .history-item.active {
-  border-color: rgba(11, 85, 106, 0.45);
-  background: rgba(11, 85, 106, 0.08);
+  border-color: var(--active-border);
+  background: var(--active-surface);
 }
 
 .history-thumb {
@@ -167,7 +328,7 @@
   display: grid;
   place-items: center;
   color: #fffaf2;
-  background: linear-gradient(135deg, #c55f3c, #0b556a);
+  background: var(--placeholder-gradient);
 }
 
 .history-copy {
@@ -207,12 +368,25 @@
   display: grid;
   place-items: center;
   font-size: 1.5rem;
-  background: linear-gradient(135deg, #c55f3c, #0b556a);
+  background: var(--placeholder-gradient);
   color: #fffaf2;
 }
 
 .persona-tagline {
   margin-top: 6px;
+}
+
+.theme-name {
+  margin-top: 8px;
+  font-family: var(--heading);
+  font-size: 1.15rem;
+  color: var(--text-h);
+}
+
+.theme-motif {
+  margin: 6px 0 10px;
+  color: var(--accent);
+  text-transform: capitalize;
 }
 
 .card-block,
@@ -231,8 +405,10 @@
 
 .chat-panel {
   display: grid;
-  grid-template-rows: auto minmax(360px, 1fr) auto auto;
+  grid-template-rows: auto auto auto;
   gap: 16px;
+  align-content: start;
+  align-self: start;
 }
 
 .chat-header {
@@ -281,12 +457,21 @@
 }
 
 .chat-stream {
-  min-height: 420px;
-  max-height: 62vh;
+  min-height: 0;
+  max-height: 58vh;
   overflow: auto;
   padding-right: 6px;
   display: grid;
   gap: 14px;
+  align-content: start;
+}
+
+.chat-stream.is-empty {
+  min-height: 320px;
+}
+
+.chat-stream.has-messages {
+  min-height: fit-content;
 }
 
 .message {
@@ -296,12 +481,12 @@
 }
 
 .message.assistant {
-  background: rgba(11, 85, 106, 0.1);
+  background: var(--assistant-bubble);
   justify-self: start;
 }
 
 .message.user {
-  background: rgba(197, 95, 60, 0.13);
+  background: var(--user-bubble);
   justify-self: end;
 }
 
@@ -328,6 +513,9 @@
   border: 1px dashed var(--border);
   border-radius: 24px;
   color: var(--muted);
+  background:
+    linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.24)),
+    var(--panel);
 }
 
 .sr-only {
@@ -348,6 +536,8 @@
   }
 
   .workspace,
+  .duo-form,
+  .duo-participants,
   .persona-form,
   .composer {
     grid-template-columns: 1fr;
