@@ -5,6 +5,7 @@ const PERSONA_STORAGE_KEY = 'wikipedia-persona-history'
 const DUO_HISTORY_STORAGE_KEY = 'wikipedia-duo-history'
 const AUDIENCE_PROFILE_STORAGE_KEY = 'wikipedia-audience-profile'
 const DEFAULT_DUO_PLAYBACK_MODE = 'preloaded'
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
 const DEFAULT_VISUAL_THEME = {
   name: 'Signature Presence',
   motif: 'distinctive public persona atmosphere',
@@ -36,7 +37,12 @@ function readStoredHistory() {
   try {
     const raw = window.localStorage.getItem(PERSONA_STORAGE_KEY)
     const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed)
+      ? parsed.map((entry) => ({
+          ...entry,
+          persona: normalizePersonaPayload(entry?.persona),
+        }))
+      : []
   } catch {
     return []
   }
@@ -352,6 +358,45 @@ function wait(ms) {
   })
 }
 
+function buildApiUrl(url) {
+  const path = String(url || '').trim()
+
+  if (!path) {
+    return path
+  }
+
+  if (/^https?:\/\//i.test(path)) {
+    return path
+  }
+
+  return API_BASE_URL ? `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}` : path
+}
+
+function toAbsoluteBackendUrl(url) {
+  const value = String(url || '').trim()
+
+  if (!value || /^https?:\/\//i.test(value) || value.startsWith('data:')) {
+    return value
+  }
+
+  if (!API_BASE_URL) {
+    return value
+  }
+
+  return `${API_BASE_URL}${value.startsWith('/') ? value : `/${value}`}`
+}
+
+function normalizePersonaPayload(persona) {
+  if (!persona || typeof persona !== 'object') {
+    return persona
+  }
+
+  return {
+    ...persona,
+    backgroundImageUrl: toAbsoluteBackendUrl(persona.backgroundImageUrl),
+  }
+}
+
 async function fetchApiJson(url, init, options = {}) {
   const retryCount = Number.isInteger(options.retryCount) ? options.retryCount : 3
   const retryDelayMs = Number.isInteger(options.retryDelayMs) ? options.retryDelayMs : 700
@@ -359,7 +404,7 @@ async function fetchApiJson(url, init, options = {}) {
 
   for (let attempt = 0; attempt <= retryCount; attempt += 1) {
     try {
-      const response = await fetch(url, init)
+      const response = await fetch(buildApiUrl(url), init)
       const data = await readApiResponse(response)
       return { response, data }
     } catch (error) {
@@ -664,11 +709,11 @@ function App() {
             return current
           }
 
-          return {
+          return normalizePersonaPayload({
             ...current,
             visualTheme: data.visualTheme || current.visualTheme,
             backgroundImageUrl: data.backgroundImageUrl,
-          }
+          })
         })
 
         setPersonaHistory((current) =>
@@ -676,11 +721,11 @@ function App() {
             entry.profile.fullUrl === profile.fullUrl
               ? {
                   ...entry,
-                  persona: {
+                  persona: normalizePersonaPayload({
                     ...entry.persona,
                     visualTheme: data.visualTheme || entry.persona.visualTheme,
                     backgroundImageUrl: data.backgroundImageUrl,
-                  },
+                  }),
                 }
               : entry,
           ),
@@ -796,13 +841,14 @@ function App() {
         throw new Error(data.error || 'Unable to create persona.')
       }
 
+      const nextPersona = normalizePersonaPayload(data.persona)
       setProfile(data.profile)
-      setPersona(data.persona)
-      setSelectedLanguageCode(data.persona.defaultLanguageCode || 'en')
+      setPersona(nextPersona)
+      setSelectedLanguageCode(nextPersona.defaultLanguageCode || 'en')
       setPersonaOpeningTurn('assistant')
       setConversationReady(false)
       setMessages([])
-      savePersonaToHistory(data.profile, data.persona, data.persona.openingMessage)
+      savePersonaToHistory(data.profile, nextPersona, nextPersona.openingMessage)
       setDraft('')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to create persona.')
