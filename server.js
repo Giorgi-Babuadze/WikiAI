@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import express from 'express'
 import { GoogleGenAI } from '@google/genai'
+import { get } from '@vercel/edge-config'
 
 export const app = express()
 const port = Number(process.env.PORT || 8787)
@@ -1244,6 +1245,18 @@ async function generateText(prompt, generationConfig = null) {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, model })
+})
+
+app.get('/welcome', async (_req, res) => {
+  try {
+    const greeting = await get('greeting')
+    res.json(greeting ?? null)
+  } catch (error) {
+    const appError = toAppError(error, 'Unable to load greeting right now.')
+    res.status(appError.statusCode).json({
+      error: appError.message,
+    })
+  }
 })
 
 app.post('/api/persona', async (req, res) => {
